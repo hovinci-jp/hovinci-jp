@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Water Ripples</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; overflow: hidden; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+'use strict';
+
+// ── Renderer ──────────────────────────────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.setClearColor(0x000000);
+document.body.appendChild(renderer.domElement);
+
+// ── Display scene ─────────────────────────────────────────────────────────
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 200);
+camera.position.set(0, 11, 9);
+camera.lookAt(0, 0, -1);
+
+// ── Simulation setup (ping-pong render targets) ───────────────────────────
+const SIM_RES  = 1024;
+const PLANE_SZ = 22;
+const SUBSTEPS = 4; // simulation steps per render frame → faster wave travel
+
+const simCam   = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const simScene = new THREE.Scene();
+
+const rtOpts = {
+  minFilter:     THREE.NearestFilter,
+  magFilter:     THREE.LinearFilter,
+  format:        THREE.RGBAFormat,
+  type:          THREE.FloatType,
+  depthBuffer:   false,
+  stencilBuffer: false,
+};
+// Two render targets: ping & pong
+// Each stores: r = current height, g = previous height
+let ping = new THREE.WebGLRenderTarget(SIM_RES, SIM_RES, rtOpts);
+let pong = ping.clone();
+
+// ── Simulation shader (wave equation PDE) ────────────────────────────────
+// u[t+1] = 2*u[t] - u[t-1] + c² * Δu
+// Output: gl_FragColor.r = next height, .g = current height (for next prev)
+const simUniforms = {
+  uState:   { value: null },                               // ping or pong
+  uTexel:   { value: new THREE.Vector2(1/SIM_RES, 1/SIM_RES) },
+  uMouse:   { value: new THREE.Vector2(-1, -1) },          // UV 0-1
+  uImpulse: { value: 0 },
+};
+
+simScene.add(new THREE.Mesh(
+  new THREE.PlaneGeometry(2, 2),
+  new THREE.ShaderMaterial({
+    uniforms: simUniforms,
+    vertexShader: `
+      varying vec2 vUv;
+      void main() { vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }
+    `,
+    fragmentShader: `
+      precision highp float;
+      uniform sampler2D uState;
+      uniform vec2      uTexel;
+      uniform vec2      uMouse;
+      uniform float     uImpulse;
+      varying vec2 vUv;
+
+      void main() {
+        float curr = texture2D(uState, vUv).r;
+        float prev = texture2D(uState, vUv).g;
+
+        // 5-point Laplacian stencil
+        float n = texture2D(uState, vUv + vec2(0.,       uTexel.y)).r;
+        float s = texture2D(uState, vUv - vec2(0.,       uTexel.y)).r;
+        float e = texture2D(uState, vUv + vec2(uTexel.x, 0.      )).r;
+        float w = texture2D(uState, vUv - vec2(uTexel.x, 0.      )).r;
+
+        float lap  = n + s + e + w - 4.0 * curr;
+
+        // Wave equation (c=0.5, well within stability limit of 1/√2)
+        float c    = 0.50;
+        float next = 2.0 * curr - prev + c * c * lap;
+
+        // Damping (energy loss per step)
+        next *= 0.9955;
+        next  = clamp(next, -1., 1.);
+
+        // Mouse impulse: pinpoint depression (water sinks, then radiates)
+        if (uImpulse > 0.001) {
+          float d = length(vUv - uMouse);
+          // Very tight negative dip — like a finger touching the surface
+          next -= uImpulse * exp(-d * d * 7000.0);
+          next  = clamp(next, -1., 1.);
+        }
+
+        // r=next, g=curr (becomes "prev" in the next step)
+        gl_FragColor = vec4(next, curr, 0., 1.);
+      }
+    `,
+  })
+));
+
+// ── Display shaders ───────────────────────────────────────────────────────
+// Vertex: samples height map → displaces Y, computes gradient normal
+// Fragment: black base, subtle grey highlights from Fresnel + spec + crests
+const dispUniforms = {
+  uHeightMap: { value: null },
+  uTexel:     { value: new THREE.Vector2(1/SIM_RES, 1/SIM_RES) },
+  uDispScale: { value: 0.44 },
+};
+
+const waterGeo = new THREE.PlaneGeometry(PLANE_SZ, PLANE_SZ, 480, 480);
+waterGeo.rotateX(-Math.PI / 2);
+
+scene.add(new THREE.Mesh(waterGeo, new THREE.ShaderMaterial({
+  uniforms: dispUniforms,
+  vertexShader: `
+    precision highp float;
+    uniform sampler2D uHeightMap;
+    uniform vec2      uTexel;
+    uniform float     uDispScale;
+
+    varying vec2  vUv;
+    varying vec3  vNormal;
+    varying float vHeight;
+
+    void main() {
+      vUv = uv;
+      float h  = texture2D(uHeightMap, uv).r;
+      float hE = texture2D(uHeightMap, uv + vec2(uTexel.x, 0.)).r;
+      float hN = texture2D(uHeightMap, uv + vec2(0., uTexel.y)).r;
+      vHeight  = h;
+
+      // Surface gradient → world-space normal (plane is rotateX -PI/2)
+      float scale = uDispScale * 55.0;
+      float dX    = (hE - h) * scale;
+      float dZ    = (hN - h) * scale;
+      vNormal     = normalize(vec3(-dX, 1.0, dZ));
+
+      vec3 pos = position;
+      pos.y   += h * uDispScale;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+    }
+  `,
+  fragmentShader: `
+    precision highp float;
+    varying vec2  vUv;
+    varying vec3  vNormal;
+    varying float vHeight;
+
+    void main() {
+      // Fixed view & light directions (camera at 0,11,9)
+      vec3 V = normalize(vec3(0.0, 11.0, 9.0));
+      vec3 L = normalize(vec3(0.3,  1.0, 0.5));
+
+      // Fresnel: edges of ripple rings catch cold grey sky
+      float NdotV  = max(dot(vNormal, vec3(0.,1.,0.)), 0.0);
+      float fresnel = pow(1.0 - NdotV, 4.5);
+
+      // Blinn-Phong specular — soft, not sharp
+      vec3  H    = normalize(L + V);
+      float spec = pow(max(dot(vNormal, H), 0.0), 30.0) * 0.50;
+
+      // Extra fill from opposite side for gentle ambient
+      vec3  L2   = normalize(vec3(-0.4, 0.8, -0.3));
+      vec3  H2   = normalize(L2 + V);
+      float spec2= pow(max(dot(vNormal, H2), 0.0), 15.0) * 0.18;
+
+      // Nonlinear crest glow: interference peaks (height≈2x) get disproportionately bright
+      float h      = vHeight;
+      float crest  = pow(max(h, 0.0), 1.4) * 1.8;          // constructive: bright flash
+      float trough = pow(max(-h, 0.0), 1.4) * 0.6;         // destructive: slight darkening
+
+      // Steel-grey / cold white highlight colour
+      vec3 hi  = vec3(0.28, 0.33, 0.37);
+      vec3 bright = vec3(0.72, 0.80, 0.85);                 // whiter at interference peaks
+      vec3 col = hi * (fresnel * 1.10 + spec * 2.0 + spec2 * 1.6)
+               + mix(hi, bright, crest) * crest
+               - hi * trough;
+
+      // Soft edge vignette
+      vec2 uv2 = vUv - 0.5;
+      col *= 1.0 - smoothstep(0.28, 0.70, length(uv2));
+
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `,
+})));
+
+// ── Mouse → water-plane UV ────────────────────────────────────────────────
+const raycaster = new THREE.Raycaster();
+const ndcMouse  = new THREE.Vector2();
+const wPlane    = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const hitPt     = new THREE.Vector3();
+
+let impulse    = 0;
+let lastSpawnT = -1;
+const clock    = new THREE.Clock();
+
+function inject(cx, cy) {
+  const t = clock.getElapsedTime();
+  if (t - lastSpawnT < 0.016) return; // ~60 splashes/sec → continuous trail
+  lastSpawnT = t;
+
+  ndcMouse.set((cx / innerWidth) * 2 - 1, -(cy / innerHeight) * 2 + 1);
+  raycaster.setFromCamera(ndcMouse, camera);
+  if (raycaster.ray.intersectPlane(wPlane, hitPt)) {
+    const u = (hitPt.x + PLANE_SZ / 2) / PLANE_SZ;
+    const v = (-hitPt.z + PLANE_SZ / 2) / PLANE_SZ;
+    if (u > 0 && u < 1 && v > 0 && v < 1) {
+      simUniforms.uMouse.value.set(u, v);
+      impulse = 0.35;
+    }
+  }
+}
+
+window.addEventListener('mousemove', e => inject(e.clientX, e.clientY));
+window.addEventListener('click',     e => inject(e.clientX, e.clientY)); // stronger on click
+window.addEventListener('touchmove', e => {
+  inject(e.touches[0].clientX, e.touches[0].clientY);
+}, { passive: true });
+
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+});
+
+// ── Ambient ripples (keeps surface alive when mouse is still) ─────────────
+let nextAmbient = 1.8;
+function spawnAmbient(t) {
+  if (t > nextAmbient) {
+    const u = 0.15 + Math.random() * 0.70;
+    const v = 0.15 + Math.random() * 0.70;
+    simUniforms.uMouse.value.set(u, v);
+    impulse = 0.45;
+    nextAmbient = t + 2.5 + Math.random() * 3.0;
+  }
+}
+
+// ── Render loop ───────────────────────────────────────────────────────────
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+  spawnAmbient(t);
+
+  // --- Simulation: SUBSTEPS per frame ---
+  // Running 4 steps per frame lets waves travel 4× faster
+  for (let i = 0; i < SUBSTEPS; i++) {
+    simUniforms.uState.value   = ping.texture;
+    simUniforms.uImpulse.value = (i === 0) ? impulse : 0.0; // inject once per frame
+
+    renderer.setRenderTarget(pong);
+    renderer.render(simScene, simCam);
+    renderer.setRenderTarget(null);
+
+    // Swap ping ↔ pong
+    const tmp = ping;
+    ping = pong;
+    pong = tmp;
+  }
+  impulse *= 0.55; // decay impulse between frames
+
+  // --- Display ---
+  dispUniforms.uHeightMap.value = ping.texture;
+  renderer.render(scene, camera);
+}
+
+animate();
+</script>
+</body>
+</html>
