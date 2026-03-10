@@ -174,8 +174,6 @@ export default function WaterShader() {
                 vec3 col = hi * (fresnel * 1.10 + spec * 2.0 + spec2 * 1.6)
                          + mix(hi, bright, crest) * crest
                          - hi * trough;
-                vec2 uv2 = vUv - 0.5;
-                col *= 1.0 - smoothstep(0.28, 0.70, length(uv2));
                 gl_FragColor = vec4(col, 1.0);
               }
             `,
