@@ -8,7 +8,7 @@ const WaterShader = dynamic(() => import("./WaterShader"), {
   ssr: false,
 });
 
-const BASE_PATH = process.env.NODE_ENV === "production" ? "/ho-vinci" : "";
+const BASE_PATH = "";
 
 // ─── i18n content ────────────────────────────────────────────────────────────
 const copy = {
