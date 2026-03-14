@@ -35,7 +35,12 @@ export default function WaterShader() {
       const PLANE_SZ = 22;
       const SUBSTEPS = 4;
 
-      renderer = new T.WebGLRenderer({ antialias: true, alpha: true });
+      // WebGL非対応デバイスへの安全なフォールバック
+      try {
+        renderer = new T.WebGLRenderer({ antialias: true, alpha: true });
+      } catch {
+        return;
+      }
       renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
       // window.innerWidth/Height を使うことで、DOMサイズに依存せず常に全幅を取得する
       const initW = window.innerWidth;
@@ -65,11 +70,18 @@ export default function WaterShader() {
       const simCam = new T.OrthographicCamera(-1, 1, 1, -1, 0, 1);
       const simScene = new T.Scene();
 
+      // モバイルブラウザはFloatTypeに非対応なことがあるため、
+      // OES_texture_half_float拡張が使えない場合はHalfFloatTypeへフォールバック
+      const gl = renderer.getContext();
+      const supportsFloat = gl.getExtension("OES_texture_float")
+        || gl.getExtension("EXT_color_buffer_float");
+      const texType = supportsFloat ? T.FloatType : T.HalfFloatType;
+
       const rtOpts = {
         minFilter: T.NearestFilter,
         magFilter: T.LinearFilter,
         format: T.RGBAFormat,
-        type: T.FloatType,
+        type: texType,
         depthBuffer: false,
         stencilBuffer: false,
       };

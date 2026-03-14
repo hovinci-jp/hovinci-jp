@@ -43,6 +43,16 @@ a {
   text-decoration: none;
 }
 
+/* スマホ向けセクションパディング縮小 */
+@media (max-width: 768px) {
+  section {
+    padding-top: 4rem !important;
+    padding-bottom: 4rem !important;
+    padding-left: 1.25rem !important;
+    padding-right: 1.25rem !important;
+  }
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 4px;

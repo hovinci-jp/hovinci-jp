@@ -189,6 +189,12 @@ function Hero() {
           50% { transform: scaleY(1); transform-origin: top; opacity: 1; }
           100% { transform: scaleY(1); transform-origin: top; opacity: 0; }
         }
+        @media (max-width: 768px) {
+          .membership-grid {
+            grid-template-columns: 1fr !important;
+            gap: 2rem !important;
+          }
+        }
       `}</style>
     </section>
   );
@@ -476,6 +482,7 @@ function Membership() {
     >
       <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
         <div
+          className="membership-grid"
           style={{
             display: "grid",
             gridTemplateColumns: "1fr 1fr",
