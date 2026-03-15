@@ -1,12 +1,12 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useEffect, useState } from "react";
 import { LangProvider, useLang } from "./LangContext";
 import Nav from "./Nav";
 
-const WaterShader = dynamic(() => import("./WaterShader"), {
-  ssr: false,
-});
+const WaterShader = dynamic(() => import("./WaterShader"), { ssr: false });
+const WaterShaderMobile = dynamic(() => import("./WaterShaderMobile"), { ssr: false });
 
 const BASE_PATH = "";
 
@@ -95,6 +95,12 @@ function Hero() {
   const { lang } = useLang();
   const t = copy[lang];
 
+  // クライアント側でモバイル判定し、対応するシェーダーを切り替える
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    setIsMobile(/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent));
+  }, []);
+
   return (
     <section
       id="top"
@@ -109,8 +115,8 @@ function Hero() {
         justifyContent: "center",
       }}
     >
-      {/* Water shader background */}
-      <WaterShader />
+      {/* PCはRenderTarget方式、モバイルはシェーダーのみ方式で描画 */}
+      {isMobile ? <WaterShaderMobile /> : <WaterShader />}
 
       {/* Overlay gradient */}
       <div
