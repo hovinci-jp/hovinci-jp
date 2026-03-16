@@ -97,45 +97,49 @@ export default function WaterShaderMobile() {
           return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
         }
 
-        // 1点からの円形リップル波
+        // 1点からの円形リップル: 低周波・広域減衰でPC版に近い質感
         float ripple(vec2 uv, vec2 center, float startT, float t) {
           float age = t - startT;
-          if (age < 0.0 || age > 4.5) return 0.0;
-          float dist  = length(uv - center);
-          float damp  = exp(-age * 1.2) * exp(-dist * 4.5);
-          return sin((dist - age * 0.22) * 18.0) * damp;
+          if (age < 0.0 || age > 5.0) return 0.0;
+          float dist = length(uv - center);
+          // 距離減衰を緩めて波が広く伝わるようにする
+          float damp = exp(-age * 0.9) * exp(-dist * 2.2);
+          // 周波数を下げて波の幅を広くし、光の縞ではなく波らしく見せる
+          return sin((dist - age * 0.18) * 9.0) * damp;
         }
 
-        // 環境波: 定常うねり + ランダム発生リップル
+        // 環境波: 低速なうねりをベースにランダムリップルを重ねる
         float ambientWaves(vec2 uv, float t) {
           float h = 0.0;
-          h += sin(uv.x * 4.2 + t * 0.40) * cos(uv.y * 3.7 + t * 0.33) * 0.030;
-          h += sin(uv.x * 7.1 - t * 0.55 + uv.y * 2.3) * 0.018;
-          h += cos(uv.x * 2.8 + uv.y * 5.5 + t * 0.28) * 0.022;
-          h += sin(uv.x * 11.0 + t * 0.70) * cos(uv.y * 9.0 - t * 0.60) * 0.010;
+          // 大きなうねり（振幅をPC版に合わせて抑える）
+          h += sin(uv.x * 3.1 + t * 0.32) * cos(uv.y * 2.8 + t * 0.28) * 0.028;
+          h += sin(uv.x * 5.4 - t * 0.41 + uv.y * 1.9) * 0.016;
+          h += cos(uv.x * 2.1 + uv.y * 4.2 + t * 0.22) * 0.020;
 
+          // ランダム発生リップル（6点）
           for (int i = 0; i < 6; i++) {
             float fi     = float(i);
             float seed   = fi * 137.508;
             float cx     = rand(vec2(seed, 0.1)) * 0.8 + 0.1;
             float cy     = rand(vec2(seed, 0.2)) * 0.8 + 0.1;
-            float period = 5.5;
+            float period = 6.0;
             float offset = rand(vec2(seed, 0.3)) * period;
             float lt     = mod(t + offset, period);
-            h += ripple(uv, vec2(cx, cy), 0.0, lt) * 0.35;
+            h += ripple(uv, vec2(cx, cy), 0.0, lt) * 0.32;
           }
           return h;
         }
 
-        // 法線からライティングを計算して水面色を返す
-        vec3 waterColor(vec2 uv, float h, float hE, float hN) {
-          float dX = (hE - h) * 28.0;
-          float dZ = (hN - h) * 28.0;
+        // PC版と同じライティング式で水面色を計算
+        // epsを大きめにして法線の傾きを強調し、凹凸感を出す
+        vec3 waterColor(float h, float hE, float hN) {
+          float dX = (hE - h) * 22.0;
+          float dZ = (hN - h) * 22.0;
           vec3 normal = normalize(vec3(-dX, 1.0, dZ));
 
           vec3 V = vec3(0.0, 1.0, 0.0);
           vec3 L = normalize(vec3(0.3, 1.0, 0.5));
-          float NdotV = max(dot(normal, V), 0.0);
+          float NdotV  = max(dot(normal, V), 0.0);
           float fresnel = pow(1.0 - NdotV, 4.5);
           vec3 H  = normalize(L + V);
           float spec  = pow(max(dot(normal, H), 0.0), 30.0) * 0.50;
@@ -144,16 +148,18 @@ export default function WaterShaderMobile() {
           float spec2 = pow(max(dot(normal, H2), 0.0), 15.0) * 0.18;
           float crest  = pow(max( h, 0.0), 1.4) * 1.8;
           float trough = pow(max(-h, 0.0), 1.4) * 0.6;
+          // PC版と同じ暗めの水面色（brightを抑えて光りすぎを防ぐ）
           vec3 hi     = vec3(0.08, 0.10, 0.12);
-          vec3 bright = vec3(0.40, 0.48, 0.55);
+          vec3 bright = vec3(0.28, 0.35, 0.40);
           return hi * (fresnel * 1.10 + spec * 2.0 + spec2 * 1.6)
                + mix(hi, bright, crest) * crest
                - hi * trough;
         }
 
         void main() {
-          float t   = uTime;
-          float eps = 1.0 / min(uResolution.x, uResolution.y);
+          float t = uTime;
+          // epsを大きめにして法線勾配を可視化しやすくする
+          float eps = 3.0 / min(uResolution.x, uResolution.y);
 
           float h  = ambientWaves(vUv, t);
           float hE = ambientWaves(vUv + vec2(eps, 0.0), t);
@@ -174,7 +180,7 @@ export default function WaterShaderMobile() {
             hN += rN * 0.6;
           }
 
-          gl_FragColor = vec4(waterColor(vUv, h, hE, hN), 1.0);
+          gl_FragColor = vec4(waterColor(h, hE, hN), 1.0);
         }
       `;
 
