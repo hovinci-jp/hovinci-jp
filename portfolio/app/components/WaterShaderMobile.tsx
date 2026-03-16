@@ -204,17 +204,17 @@ export default function WaterShaderMobile() {
               vec3 V = vec3(0.0, 1.0, 0.0);
               vec3 L = normalize(vec3(0.3, 1.0, 0.5));
               float NdotV  = max(dot(vNormal, V), 0.0);
-              float fresnel = pow(1.0 - NdotV, 4.5);
+              float fresnel = pow(1.0 - NdotV, 3.5);
               vec3 H  = normalize(L + V);
-              float spec  = pow(max(dot(vNormal, H), 0.0), 30.0) * 0.50;
+              float spec  = pow(max(dot(vNormal, H), 0.0), 24.0) * 0.90;
               vec3 L2 = normalize(vec3(-0.4, 0.8, -0.3));
               vec3 H2 = normalize(L2 + V);
-              float spec2 = pow(max(dot(vNormal, H2), 0.0), 15.0) * 0.18;
-              float crest  = pow(max(vHeight, 0.0), 1.4) * 1.8;
+              float spec2 = pow(max(dot(vNormal, H2), 0.0), 12.0) * 0.36;
+              float crest  = pow(max(vHeight, 0.0), 1.2) * 2.8;
               float trough = pow(max(-vHeight, 0.0), 1.4) * 0.6;
-              vec3 hi     = vec3(0.08, 0.10, 0.12);
-              vec3 bright = vec3(0.40, 0.48, 0.55);
-              vec3 col = hi * (fresnel * 1.10 + spec * 2.0 + spec2 * 1.6)
+              vec3 hi     = vec3(0.10, 0.13, 0.16);
+              vec3 bright = vec3(0.55, 0.65, 0.72);
+              vec3 col = hi * (fresnel * 1.60 + spec * 2.8 + spec2 * 2.2)
                        + mix(hi, bright, crest) * crest - hi * trough;
               gl_FragColor = vec4(col, 1.0);
             }
@@ -372,16 +372,16 @@ export default function WaterShaderMobile() {
               vec3 n = normalize(vec3(-(hE - h) * 22.0, 1.0, (hN - h) * 22.0));
               vec3 V = vec3(0.0, 1.0, 0.0);
               vec3 L = normalize(vec3(0.3, 1.0, 0.5));
-              float fr = pow(1.0 - max(dot(n, V), 0.0), 4.5);
+              float fr = pow(1.0 - max(dot(n, V), 0.0), 3.5);
               vec3 H = normalize(L + V);
-              float sp = pow(max(dot(n, H), 0.0), 30.0) * 0.50;
+              float sp = pow(max(dot(n, H), 0.0), 24.0) * 0.90;
               vec3 L2 = normalize(vec3(-0.4, 0.8, -0.3));
-              float sp2 = pow(max(dot(n, normalize(L2 + V)), 0.0), 15.0) * 0.18;
-              float crest  = pow(max( h, 0.0), 1.4) * 1.8;
+              float sp2 = pow(max(dot(n, normalize(L2 + V)), 0.0), 12.0) * 0.36;
+              float crest  = pow(max( h, 0.0), 1.2) * 2.8;
               float trough = pow(max(-h, 0.0), 1.4) * 0.6;
-              vec3 hi = vec3(0.08, 0.10, 0.12);
-              vec3 br = vec3(0.28, 0.35, 0.40);
-              return hi * (fr * 1.10 + sp * 2.0 + sp2 * 1.6)
+              vec3 hi = vec3(0.10, 0.13, 0.16);
+              vec3 br = vec3(0.55, 0.65, 0.72);
+              return hi * (fr * 1.60 + sp * 2.8 + sp2 * 2.2)
                    + mix(hi, br, crest) * crest - hi * trough;
             }
             void main() {
