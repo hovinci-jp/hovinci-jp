@@ -212,7 +212,7 @@ export default function WaterShaderMobile() {
               float spec2 = pow(max(dot(vNormal, H2), 0.0), 12.0) * 0.36;
               float crest  = pow(max(vHeight, 0.0), 1.2) * 2.8;
               float trough = pow(max(-vHeight, 0.0), 1.4) * 0.6;
-              vec3 hi     = vec3(0.10, 0.13, 0.16);
+              vec3 hi     = vec3(0.08, 0.10, 0.12);
               vec3 bright = vec3(0.55, 0.65, 0.72);
               vec3 col = hi * (fresnel * 1.60 + spec * 2.8 + spec2 * 2.2)
                        + mix(hi, bright, crest) * crest - hi * trough;
@@ -379,7 +379,7 @@ export default function WaterShaderMobile() {
               float sp2 = pow(max(dot(n, normalize(L2 + V)), 0.0), 12.0) * 0.36;
               float crest  = pow(max( h, 0.0), 1.2) * 2.8;
               float trough = pow(max(-h, 0.0), 1.4) * 0.6;
-              vec3 hi = vec3(0.10, 0.13, 0.16);
+              vec3 hi = vec3(0.08, 0.10, 0.12);
               vec3 br = vec3(0.55, 0.65, 0.72);
               return hi * (fr * 1.60 + sp * 2.8 + sp2 * 2.2)
                    + mix(hi, br, crest) * crest - hi * trough;
